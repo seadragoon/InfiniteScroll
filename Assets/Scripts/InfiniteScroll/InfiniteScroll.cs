@@ -16,9 +16,6 @@ public class InfiniteScroll : UIBehaviour
 	//! 作成するプレハブ
 	[SerializeField]
 	private RectTransform _itemPrefab = null;
-	//! 生成するアイテムの数（このオブジェクトを使いまわしてループさせる）
-	[SerializeField, Range(0, 30)]
-	public int instantiateItemCount = 9;
 	//! FIXに掛かる力
 	[SerializeField]
 	private int SPRING_POWER = 10;
@@ -38,10 +35,12 @@ public class InfiniteScroll : UIBehaviour
 
 	//! スクロール
 	private FixedScrollRect _fixedScroll = null;
-	//! 前フレーム位置との差分
-	protected float diffPreFramePosition = 0;
-	//! 現在のアイテムNo
-	protected int currentItemNo = 0;
+	//! 実際に用意する生成アイテム数
+	private int _actualItemCount = 0;
+    //! 前フレーム位置との差分
+    private float diffPreFramePosition = 0;
+    //! 現在のアイテムNo
+    private int currentItemNo = 0;
     //! 自動スクロール開始位置
     private float _autoScrollStartPosition = 0;
     //! 自動スクロール終了位置
@@ -76,8 +75,17 @@ public class InfiniteScroll : UIBehaviour
 		}
 	}
 
-	//! スクロール速度
-	private float scrollVelocity
+	// スクロール領域のサイズ
+    private float scrollAreaSize
+    {
+        get
+        {
+			var scrollRect = _fixedScroll.GetComponent<RectTransform>();
+            return (direction == Direction.Vertical) ? scrollRect.rect.height : scrollRect.rect.width;
+        }
+    }
+    //! スクロール速度
+    private float scrollVelocity
 	{
 		get
         {
@@ -149,7 +157,7 @@ public class InfiniteScroll : UIBehaviour
 		_innerItems = newItems;
 
 		// 最初に表示するリストを作成
-		for(int i = 0; i < instantiateItemCount; i++) {
+		for(int i = 0; i < _actualItemCount; i++) {
 			var obj = Instantiate(_itemPrefab) as RectTransform;
 			// RectTransformを初期化
 			obj.SetParent(transform, false);
@@ -185,8 +193,11 @@ public class InfiniteScroll : UIBehaviour
 		// 初期化済みの確認
 		if( isInitialized ) return;
 
-		// スクロールを初期化
-		_fixedScroll = GetComponentInParent<FixedScrollRect>();
+        // アイテムを非表示に
+        _itemPrefab.gameObject.SetActive(false);
+
+        // スクロールを初期化
+        _fixedScroll = GetComponentInParent<FixedScrollRect>();
 		_fixedScroll.horizontal = direction == Direction.Horizontal;
 		_fixedScroll.vertical = direction == Direction.Vertical;
 		_fixedScroll.content = rectTransform;
@@ -196,11 +207,11 @@ public class InfiniteScroll : UIBehaviour
 		_fixedScroll.onBeginDrag.RemoveAllListeners();
         _fixedScroll.onBeginDrag.AddListener(OnBeginDrag);
 
-        // アイテムを非表示に
-        _itemPrefab.gameObject.SetActive(false);
+		// 実際に用意する生成アイテム数
+        _actualItemCount = Mathf.CeilToInt(scrollAreaSize / itemSize) + 3;
 
-		// 初期化完了
-		isInitialized = true;
+        // 初期化完了
+        isInitialized = true;
     }
 
     //! FixedScrollRectから呼ばれるように登録する関数
@@ -227,11 +238,11 @@ public class InfiniteScroll : UIBehaviour
 			int objIndex = GetActualIndex(currentItemNo);
 
 			// 位置移動
-			var pos = (itemSize * instantiateItemCount) + (itemSize * currentItemNo);
+			var pos = (itemSize * _actualItemCount) + (itemSize * currentItemNo);
 			_createdItems [objIndex].anchoredPosition = (direction == Direction.Vertical) ? new Vector2(0, -pos) : new Vector2(pos, 0);
 
 			// アイテムデータを更新
-			int nextNo = currentItemNo + instantiateItemCount;
+			int nextNo = currentItemNo + _actualItemCount;
             int itemIndex = GetInnerIndex(nextNo);
             _innerItems[itemIndex].useItemIndex = objIndex;
 			_innerItems[itemIndex].index = nextNo;
@@ -248,7 +259,7 @@ public class InfiniteScroll : UIBehaviour
 			diffPreFramePosition += itemSize;
 
             // 実際のオブジェクト情報を取得
-            int objIndex = GetActualIndex(currentItemNo + instantiateItemCount - 1);
+            int objIndex = GetActualIndex(currentItemNo + _actualItemCount - 1);
 
 			// 位置移動
 			var pos = itemSize * currentItemNo;
@@ -352,7 +363,7 @@ public class InfiniteScroll : UIBehaviour
     //! 実際の配列の指定番目のインデックスを返す
     private int GetActualIndex(int number)
     {
-		return GetArrayIndex(number, instantiateItemCount);
+		return GetArrayIndex(number, _actualItemCount);
     }
     //! 内部配列の指定番目のインデックスを返す
     private int GetInnerIndex(int number)
