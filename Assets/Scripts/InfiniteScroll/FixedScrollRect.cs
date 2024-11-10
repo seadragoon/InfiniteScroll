@@ -6,19 +6,13 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using System.Collections;
+using UnityEngine.Events;
 
 //! 固定ScrollRect
 public class FixedScrollRect : ScrollRect
 {
-	//! 無限スクロール
-	private InfiniteScroll m_InfinityScroll;
-	private InfiniteScroll infinityScroll {
-		get {
-			if (m_InfinityScroll == null)
-				m_InfinityScroll = GetComponentInChildren<InfiniteScroll> ();
-			return m_InfinityScroll;
-		}
-	}
+	public UnityEvent onBeginDrag;
+	public UnityEvent oEndDrag;
 
 	//! ドラッグしているかどうか
 	public bool isDrag
@@ -27,19 +21,12 @@ public class FixedScrollRect : ScrollRect
 		private set;
 	}
 
-	//! スクロール速度
-	public float Velocity {
-		get {
-			return  (infinityScroll.direction == InfiniteScroll.Direction.Vertical) ? 
-				-velocity.y :
-				velocity.x;
-		}
-	}
-
 	//! ドラッグ開始
 	public override void OnBeginDrag(PointerEventData eventData){
 		base.OnBeginDrag (eventData);
 		isDrag = true;
+
+		onBeginDrag?.Invoke ();
 	}
 
 	//! ドラッグ終了
@@ -47,7 +34,6 @@ public class FixedScrollRect : ScrollRect
 		base.OnEndDrag (eventData);
 		isDrag = false;
 
-		// 固定を解除
-		infinityScroll.IsFix = false;
-	}
+        oEndDrag?.Invoke();
+    }
 }
