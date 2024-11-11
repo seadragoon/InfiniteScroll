@@ -3,6 +3,8 @@ using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using System.Collections.Generic;
 using System.Linq;
+using static UnityEditor.PlayerSettings;
+using static UnityEditor.Progress;
 
 public class InfiniteScroll : UIBehaviour
 {
@@ -37,10 +39,8 @@ public class InfiniteScroll : UIBehaviour
 	private FixedScrollRect _fixedScroll = null;
 	//! 実際に用意する生成アイテム数
 	private int _actualItemCount = 0;
-    //! 前フレーム位置との差分
-    private float diffPreFramePosition = 0;
-    //! 現在のアイテムNo
-    private int currentItemNo = 0;
+    //! 前フレームの位置
+    private float _preFramePosition = 0;
     //! 自動スクロール開始位置
     private float _autoScrollStartPosition = 0;
     //! 自動スクロール終了位置
@@ -96,9 +96,7 @@ public class InfiniteScroll : UIBehaviour
 	//! スクロールベース位置
 	private float basePosition {
 		get {
-			float length = (direction == Direction.Vertical) ? 
-				rectTransform.sizeDelta.y:
-				rectTransform.sizeDelta.x;
+			float length = (direction == Direction.Vertical) ? rectTransform.rect.height : rectTransform.rect.width;
 			// スクロールの中心からアンカーが上なのでアイテムの半分だけ上にずらす
 			return (length / 2)/* center */ - (itemSize / 2);
 		}
@@ -118,7 +116,7 @@ public class InfiniteScroll : UIBehaviour
 	//! アイテム情報クラス
 	private class ItemData
 	{
-		private int _useItemIndex;	//!< 作成されたアイテムのうち、どのインデックスを使用しているか
+		private int _useItemIndex = -1;	//!< 作成されたアイテムのうち、どのインデックスを使用しているか
 
 		public int index;	//!< インデックス
 		public object data;	//!< アイテムに設定されるデータ
@@ -184,8 +182,9 @@ public class InfiniteScroll : UIBehaviour
         Scroll(0);
 
         // 最初の更新
-        LateUpdate ();
-	}
+        AdjustPositionMoveForward();
+		AdjustPositionMoveBack();
+    }
 
 	//! 初期化
 	private void Initialize()
@@ -227,54 +226,19 @@ public class InfiniteScroll : UIBehaviour
 		// アイテム存在確認
 		if (_createdItems.Count <= 0) {
 			return;
-		}
+        }
 
-		// 手前に引く（進む）
-		while(anchoredPosition - diffPreFramePosition  < -itemSize * 2)
-		{
-			diffPreFramePosition -= itemSize;
+		// 位置が進んだ（番号が戻った）場合
+		if (_preFramePosition < anchoredPosition)
+        {
+			AdjustPositionMoveForward();
+        }
 
-			// 実際のオブジェクト情報を取得
-			int objIndex = GetActualIndex(currentItemNo);
-
-			// 位置移動
-			var pos = (itemSize * _actualItemCount) + (itemSize * currentItemNo);
-			_createdItems [objIndex].anchoredPosition = (direction == Direction.Vertical) ? new Vector2(0, -pos) : new Vector2(pos, 0);
-
-			// アイテムデータを更新
-			int nextNo = currentItemNo + _actualItemCount;
-            int itemIndex = GetInnerIndex(nextNo);
-            _innerItems[itemIndex].useItemIndex = objIndex;
-			_innerItems[itemIndex].index = nextNo;
-
-			// 更新通知
-			OnItemShow(_innerItems[itemIndex]);
-
-			currentItemNo++;
-		}
-
-		// 奥に引く（戻る）
-		while(anchoredPosition - diffPreFramePosition > 0)
-		{
-			diffPreFramePosition += itemSize;
-
-            // 実際のオブジェクト情報を取得
-            int objIndex = GetActualIndex(currentItemNo + _actualItemCount - 1);
-
-			// 位置移動
-			var pos = itemSize * currentItemNo;
-			_createdItems [objIndex].anchoredPosition = (direction == Direction.Vertical) ? new Vector2(0, -pos): new Vector2(pos, 0);
-
-			// アイテムデータを更新
-            int itemIndex = GetInnerIndex(currentItemNo);
-            _innerItems[itemIndex].useItemIndex = objIndex;
-			_innerItems[itemIndex].index = currentItemNo;
-
-			// 更新通知
-			OnItemShow(_innerItems[itemIndex]);
-
-			currentItemNo--;
-		}
+        // 位置が戻った（番号が進んだ）場合
+        if (_preFramePosition > anchoredPosition)
+        {
+			AdjustPositionMoveBack();
+        }
 
 		if (!_fixedScroll.isDrag && !_isFix)
         {
@@ -313,6 +277,63 @@ public class InfiniteScroll : UIBehaviour
 				}
             }
         }
+
+		// 現在のフレームの位置を保持
+        _preFramePosition = anchoredPosition;
+    }
+	//! 前方に移動した際の手前側の位置設定
+	public void AdjustPositionMoveForward()
+    {
+        for (int i = 0; i < _createdItems.Count; i++)
+        {
+            var item = _createdItems[i];
+            var pos = (direction == Direction.Vertical) ? -item.anchoredPosition.y : item.anchoredPosition.x;
+
+            if (anchoredPosition + pos > scrollAreaSize + itemSize)
+            {
+                // アイテムの位置移動
+                var offset = itemSize * _actualItemCount;
+                item.anchoredPosition -= (direction == Direction.Vertical) ? new Vector2(0, -offset) : new Vector2(offset, 0);
+
+                // アイテムデータを更新
+                var beforeItem = _innerItems.First(x => x.useItemIndex == i);
+                beforeItem.useItemIndex = -1;
+                int nextIndex = beforeItem.index - _actualItemCount;
+                int itemIndex = GetInnerIndex(nextIndex);
+                _innerItems[itemIndex].useItemIndex = i;
+                _innerItems[itemIndex].index = nextIndex;
+
+                // 更新通知
+                OnItemShow(_innerItems[itemIndex]);
+            }
+        }
+    }
+    //! 後方に移動した際の奥側の位置設定
+    public void AdjustPositionMoveBack()
+    {
+        for (int i = 0; i < _createdItems.Count; i++)
+        {
+            var item = _createdItems[i];
+            var pos = (direction == Direction.Vertical) ? -item.anchoredPosition.y : item.anchoredPosition.x;
+
+            if (anchoredPosition + pos < -itemSize * 2)
+            {
+                // アイテムの位置移動
+                var offset = itemSize * _actualItemCount;
+                item.anchoredPosition += (direction == Direction.Vertical) ? new Vector2(0, -offset) : new Vector2(offset, 0);
+
+                // アイテムデータを更新
+                var beforeItem = _innerItems.First(x => x.useItemIndex == i);
+                beforeItem.useItemIndex = -1;
+                int nextIndex = beforeItem.index + _actualItemCount;
+                int itemIndex = GetInnerIndex(nextIndex);
+                _innerItems[itemIndex].useItemIndex = i;
+                _innerItems[itemIndex].index = nextIndex;
+
+                // 更新通知
+                OnItemShow(_innerItems[itemIndex]);
+            }
+        }
     }
 
 	//! スクロールを指定位置に移動する
@@ -322,8 +343,9 @@ public class InfiniteScroll : UIBehaviour
 		_fixedScroll.StopMovement ();
 		// 目標位置に移動する
 		anchoredPosition = basePosition - (itemSize * index);
-		// FIX
-		_isFix = true;
+		_preFramePosition = anchoredPosition;
+        // FIX
+        _isFix = true;
 		// 自動スクロールも停止
 		_isAutoScroll = false;
         // アイテム固定されたイベント発火
