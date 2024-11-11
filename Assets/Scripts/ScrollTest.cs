@@ -13,8 +13,14 @@ public class ScrollTest : MonoBehaviour
         {
             var item = new TestItem.Data();
             item.itemNo = i + 1;
+            item.onClickItem = OnClickItem;
             list.Add(item);
         }
         _scroll.Create(list.ToArray());
+    }
+
+    private void OnClickItem (int itemNo)
+    {
+        _scroll.ForceScroll(0);
     }
 }

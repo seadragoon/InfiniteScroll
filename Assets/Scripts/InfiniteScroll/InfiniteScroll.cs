@@ -154,36 +154,30 @@ public class InfiniteScroll : UIBehaviour
 		}
 		_innerItems = newItems;
 
-		// 最初に表示するリストを作成
-		for(int i = 0; i < _actualItemCount; i++) {
-			var obj = Instantiate(_itemPrefab) as RectTransform;
-			// RectTransformを初期化
-			obj.SetParent(transform, false);
-			obj.name = i.ToString();
-			obj.anchoredPosition = (direction == Direction.Vertical) ? new Vector2(0, -itemSize * i) : new Vector2(itemSize * i, 0);
+        // 最初に表示するリストを作成
+        if (_createdItems.Count == 0)
+        {
+            // 最初に表示するリストを作成
+            for (int i = 0; i < _actualItemCount; i++)
+            {
+                var obj = Instantiate(_itemPrefab) as RectTransform;
+                // RectTransformを初期化
+                obj.SetParent(transform, false);
+                obj.name = i.ToString();
 
-			// アイテムインターフェースを継承したクラスが付いてるオブジェクトを取得
-			var item = (MonoBehaviour)obj.GetComponent(typeof(IListItem));
-			if (item != null) {
-				_innerItems [i].useItemIndex = _createdItems.Count;
-			}
+                // 作成したアイテムリストに追加
+                _createdItems.Add(obj);
 
-			// 作成したアイテムリストに追加
-			_createdItems.Add (obj);
-
-			// 表示
-			obj.gameObject.SetActive(true);
-
-			// 更新イベントの呼び出し
-			OnItemShow(_innerItems[i]);
+                // 表示
+                obj.gameObject.SetActive(true);
+            }
         }
 
-        // 初期位置設定
-        Scroll(0);
+        // 最初に表示するリストを初期化
+        InitializeActualItems(0);
 
-        // 最初の更新
-        AdjustPositionMoveForward();
-		AdjustPositionMoveBack();
+        // 初期位置設定
+        ForceScroll(0);
     }
 
 	//! 初期化
@@ -213,6 +207,34 @@ public class InfiniteScroll : UIBehaviour
         isInitialized = true;
     }
 
+	//! 実際に表示するアイテムの初期化
+	private void InitializeActualItems(int index)
+    {
+        // 内部データ初期化
+        for (int i = 0; i < _innerItems.Length; i++)
+        {
+            _innerItems[i].useItemIndex = -1;
+        }
+
+        // 実際のアイテムを初期化
+        for (int i = 0; i < _createdItems.Count; i++)
+        {
+            int totalIndex = index + i;
+            int actualIndex = GetActualIndex(totalIndex);
+            var obj = _createdItems[actualIndex];
+
+            // 位置設定
+            obj.anchoredPosition = (direction == Direction.Vertical) ? new Vector2(0, -itemSize * totalIndex) : new Vector2(itemSize * totalIndex, 0);
+
+            // index設定
+            int innerIndex = GetInnerIndex(actualIndex);
+            _innerItems[innerIndex].useItemIndex = actualIndex;
+
+            // 更新イベントの呼び出し
+            OnItemShow(_innerItems[innerIndex]);
+        }
+    }
+
     //! FixedScrollRectから呼ばれるように登録する関数
     private void OnBeginDrag()
     {
@@ -226,18 +248,6 @@ public class InfiniteScroll : UIBehaviour
 		// アイテム存在確認
 		if (_createdItems.Count <= 0) {
 			return;
-        }
-
-		// 位置が進んだ（番号が戻った）場合
-		if (_preFramePosition < anchoredPosition)
-        {
-			AdjustPositionMoveForward();
-        }
-
-        // 位置が戻った（番号が進んだ）場合
-        if (_preFramePosition > anchoredPosition)
-        {
-			AdjustPositionMoveBack();
         }
 
 		if (!_fixedScroll.isDrag && !_isFix)
@@ -264,7 +274,7 @@ public class InfiniteScroll : UIBehaviour
 					anchoredPosition += diff * Time.deltaTime * SPRING_POWER;
 					if (_autoScrollFinishPosition < anchoredPosition)
 					{
-						Scroll(GetCurrentIndex());
+                        OnScrollFixed(GetCurrentIndex());
 					}
 				}
 				else
@@ -272,16 +282,29 @@ public class InfiniteScroll : UIBehaviour
 					anchoredPosition -= -diff * Time.deltaTime * SPRING_POWER;
 					if (_autoScrollFinishPosition > anchoredPosition)
 					{
-						Scroll(GetCurrentIndex());
+                        OnScrollFixed(GetCurrentIndex());
 					}
 				}
             }
         }
 
-		// 現在のフレームの位置を保持
+        // 位置が進んだ（番号が戻った）場合
+        if (_preFramePosition < anchoredPosition)
+        {
+            AdjustPositionMoveForward();
+        }
+
+        // 位置が戻った（番号が進んだ）場合
+        if (_preFramePosition > anchoredPosition)
+        {
+            AdjustPositionMoveBack();
+        }
+
+
+        // 現在のフレームの位置を保持
         _preFramePosition = anchoredPosition;
     }
-	//! 前方に移動した際の手前側の位置設定
+	//! 前方に移動した際の位置移動（前から後ろへ）
 	public void AdjustPositionMoveForward()
     {
         for (int i = 0; i < _createdItems.Count; i++)
@@ -301,7 +324,6 @@ public class InfiniteScroll : UIBehaviour
                 int nextIndex = beforeItem.index - _actualItemCount;
                 int itemIndex = GetInnerIndex(nextIndex);
                 _innerItems[itemIndex].useItemIndex = i;
-                _innerItems[itemIndex].index = nextIndex;
 
                 // 更新通知
                 OnItemShow(_innerItems[itemIndex]);
@@ -328,7 +350,6 @@ public class InfiniteScroll : UIBehaviour
                 int nextIndex = beforeItem.index + _actualItemCount;
                 int itemIndex = GetInnerIndex(nextIndex);
                 _innerItems[itemIndex].useItemIndex = i;
-                _innerItems[itemIndex].index = nextIndex;
 
                 // 更新通知
                 OnItemShow(_innerItems[itemIndex]);
@@ -341,19 +362,44 @@ public class InfiniteScroll : UIBehaviour
 	{
 		// スクロールの動きを止める
 		_fixedScroll.StopMovement ();
-		// 目標位置に移動する
-		anchoredPosition = basePosition - (itemSize * index);
-		_preFramePosition = anchoredPosition;
+
+		// 自動スクロールON
+        _isFix = false;
+        _isAutoScroll = true;
+
+        // 移動する先を設定する
+        _autoScrollFinishPosition = GetTargetPosition(index);
+        _autoScrollStartPosition = anchoredPosition;
+    }
+    //! スクロールを指定位置に強制移動する
+    public void ForceScroll(int index)
+    {
+        // アイテム初期化
+        InitializeActualItems(index);
+        // スクロール固定
+        OnScrollFixed(index);
+    }
+    //! スクロール固定
+    private void OnScrollFixed(int index)
+    {
+        // スクロールの動きを止める
+        _fixedScroll.StopMovement();
         // FIX
         _isFix = true;
-		// 自動スクロールも停止
-		_isAutoScroll = false;
+        // 自動スクロールも停止
+        _isAutoScroll = false;
+        // 目標位置に明示的に移動する
+        anchoredPosition = basePosition - (itemSize * index);
+        _preFramePosition = anchoredPosition;
+        // 表示更新
+        AdjustPositionMoveForward();
+        AdjustPositionMoveBack();
         // アイテム固定されたイベント発火
         int itemIndex = GetInnerIndex(GetCurrentIndex());
         OnItemFixed(_innerItems[itemIndex]);
-	}
-	//! インデックスをアンカー位置から求める
-	public int GetCurrentIndex()
+    }
+    //! インデックスをアンカー位置から求める
+    public int GetCurrentIndex()
 	{
 		float rough = (basePosition - anchoredPosition) / itemSize;
 		return (int)Mathf.Round(rough);
