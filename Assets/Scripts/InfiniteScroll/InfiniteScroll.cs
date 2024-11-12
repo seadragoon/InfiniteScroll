@@ -278,28 +278,23 @@ public class InfiniteScroll : UIBehaviour
             // 自動スクロールONの場合、ターゲット位置に移動する
             if (_isAutoScroll)
             {
-                float diff = _autoScrollFinishPosition - _autoScrollStartPosition;
-                if (diff > 0)
+                float velocity = (_autoScrollFinishPosition - _autoScrollStartPosition) * Time.deltaTime * SPRING_POWER;
+
+                // 最大速度を超えないようにする ※速すぎるとバグるので1フレームで進む距離はスクロール範囲と同等くらいまでにしないといけない
+                if (velocity > Mathf.Min(LIMIT_SCROLL_VELOCITY, scrollAreaSize))
                 {
-                    if (_autoScrollFinishPosition < anchoredPosition + diff * Time.deltaTime * SPRING_POWER)
-                    {
-                        OnScrollFixed(_autoScrollTargetIndex);
-                    }
-                    else
-                    {
-                        anchoredPosition += diff * Time.deltaTime * SPRING_POWER;
-                    }
+                    velocity = Mathf.Min(LIMIT_SCROLL_VELOCITY, scrollAreaSize);
+                }
+
+                if (velocity == 0
+                 || (velocity > 0 && _autoScrollFinishPosition < anchoredPosition + velocity)
+                 || (velocity < 0 && _autoScrollFinishPosition > anchoredPosition + velocity))
+                {
+                    OnScrollFixed(_autoScrollTargetIndex);
                 }
                 else
                 {
-                    if (_autoScrollFinishPosition > anchoredPosition + diff * Time.deltaTime * SPRING_POWER)
-                    {
-                        OnScrollFixed(_autoScrollTargetIndex);
-                    }
-                    else
-                    {
-                        anchoredPosition -= -diff * Time.deltaTime * SPRING_POWER;
-                    }
+                    anchoredPosition += velocity;
                 }
             }
         }
