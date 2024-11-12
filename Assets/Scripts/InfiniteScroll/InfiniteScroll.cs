@@ -35,7 +35,7 @@ public class InfiniteScroll : UIBehaviour
     //! 内部アイテムリスト
     private ItemData[] _items = null;
     //! 作成されたリストアイテムのRectTransform
-    private List<RectTransform> _actualItems = new List<RectTransform>();
+    private List<ActualItem> _actualItems = new List<ActualItem>();
 
     //! スクロール
     private FixedScrollRect _fixedScroll = null;
@@ -129,23 +129,18 @@ public class InfiniteScroll : UIBehaviour
         }
     }
 
+    //! 実際のアイテム
+    private class ActualItem
+    {
+        public ItemData itemData;
+        public RectTransform rectTransform;
+    }
+
     //! アイテム情報クラス
     private class ItemData
     {
-        private int _useItemIndex = -1; //!< 作成されたアイテムのうち、どのインデックスを使用しているか
-
         public int index;   //!< インデックス
         public object data; //!< アイテムに設定されるデータ
-
-        //! 作成されたアイテムのインデックス
-        public int useItemIndex
-        {
-            get { return _useItemIndex; }
-            set
-            {
-                _useItemIndex = value;
-            }
-        }
     }
 
 
@@ -177,16 +172,19 @@ public class InfiniteScroll : UIBehaviour
             // 最初に表示するリストを作成
             for (int i = 0; i < _actualItemCount; i++)
             {
-                var obj = Instantiate(_itemPrefab) as RectTransform;
+                var rect = Instantiate(_itemPrefab) as RectTransform;
                 // RectTransformを初期化
-                obj.SetParent(transform, false);
-                obj.name = i.ToString();
+                rect.SetParent(transform, false);
+                rect.name = i.ToString();
 
-                // 作成したアイテムリストに追加
-                _actualItems.Add(obj);
+                // 作成したアイテムに追加
+                var item = new ActualItem();
+                item.itemData = null;
+                item.rectTransform = rect;
+                _actualItems.Add(item);
 
                 // 表示
-                obj.gameObject.SetActive(true);
+                rect.gameObject.SetActive(true);
             }
         }
 
@@ -227,25 +225,19 @@ public class InfiniteScroll : UIBehaviour
     //! 実際に表示するアイテムの初期化
     private void InitializeActualItems(int index)
     {
-        // 内部データ初期化
-        for (int i = 0; i < _items.Length; i++)
-        {
-            _items[i].useItemIndex = -1;
-        }
-
         // 実際のアイテムを初期化
         for (int i = 0; i < _actualItems.Count; i++)
         {
             int totalIndex = index + i;
             int actualIndex = GetActualIndex(totalIndex);
-            var obj = _actualItems[actualIndex];
+            var actualItem = _actualItems[actualIndex];
 
             // 位置設定
-            obj.anchoredPosition = (direction == Direction.Vertical) ? new Vector2(0, -itemSize * totalIndex) : new Vector2(itemSize * totalIndex, 0);
+            actualItem.rectTransform.anchoredPosition = (direction == Direction.Vertical) ? new Vector2(0, -itemSize * totalIndex) : new Vector2(itemSize * totalIndex, 0);
 
             // index設定
             int itemIndex = GetItemIndex(actualIndex);
-            _items[itemIndex].useItemIndex = actualIndex;
+            actualItem.itemData = _items[itemIndex];
 
             // 更新イベントの呼び出し
             OnItemShow(_items[itemIndex]);
@@ -342,23 +334,21 @@ public class InfiniteScroll : UIBehaviour
     {
         for (int i = 0; i < _actualItems.Count; i++)
         {
-            var item = _actualItems[i];
-            var pos = (direction == Direction.Vertical) ? -item.anchoredPosition.y : item.anchoredPosition.x;
+            var actualItem = _actualItems[i];
+            var pos = (direction == Direction.Vertical) ? -actualItem.rectTransform.anchoredPosition.y : actualItem.rectTransform.anchoredPosition.x;
 
             if (anchoredPosition + pos > scrollAreaSize + itemSize)
             {
                 // アイテムの位置移動
                 var offset = itemSize * _actualItems.Count;
-                item.anchoredPosition -= (direction == Direction.Vertical) ? new Vector2(0, -offset) : new Vector2(offset, 0);
+                actualItem.rectTransform.anchoredPosition -= (direction == Direction.Vertical) ? new Vector2(0, -offset) : new Vector2(offset, 0);
 
                 // アイテムデータを更新
                 try
                 {
-                    var beforeItem = _items.First(x => x.useItemIndex == i);
-                    beforeItem.useItemIndex = -1;
-                    int nextIndex = beforeItem.index - _actualItems.Count;
+                    int nextIndex = actualItem.itemData.index - _actualItems.Count;
                     int itemIndex = GetItemIndex(nextIndex);
-                    _items[itemIndex].useItemIndex = i;
+                    actualItem.itemData = _items[itemIndex];
 
                     // 更新通知
                     OnItemShow(_items[itemIndex]);
@@ -375,23 +365,21 @@ public class InfiniteScroll : UIBehaviour
     {
         for (int i = 0; i < _actualItems.Count; i++)
         {
-            var item = _actualItems[i];
-            var pos = (direction == Direction.Vertical) ? -item.anchoredPosition.y : item.anchoredPosition.x;
+            var actualItem = _actualItems[i];
+            var pos = (direction == Direction.Vertical) ? -actualItem.rectTransform.anchoredPosition.y : actualItem.rectTransform.anchoredPosition.x;
 
             if (anchoredPosition + pos < -itemSize * 2)
             {
                 // アイテムの位置移動
                 var offset = itemSize * _actualItems.Count;
-                item.anchoredPosition += (direction == Direction.Vertical) ? new Vector2(0, -offset) : new Vector2(offset, 0);
+                actualItem.rectTransform.anchoredPosition += (direction == Direction.Vertical) ? new Vector2(0, -offset) : new Vector2(offset, 0);
 
                 try
                 {
                     // アイテムデータを更新
-                    var beforeItem = _items.First(x => x.useItemIndex == i);
-                    beforeItem.useItemIndex = -1;
-                    int nextIndex = beforeItem.index + _actualItems.Count;
+                    int nextIndex = actualItem.itemData.index + _actualItems.Count;
                     int itemIndex = GetItemIndex(nextIndex);
-                    _items[itemIndex].useItemIndex = i;
+                    actualItem.itemData = _items[itemIndex];
 
                     // 更新通知
                     OnItemShow(_items[itemIndex]);
@@ -558,6 +546,11 @@ public class InfiniteScroll : UIBehaviour
     //! アイテムが使用しているBehaviourを取得
     private IListItem GetListItemInterface(ItemData item)
     {
-        return _actualItems[item.useItemIndex].GetComponent<IListItem>();
+        var target = _actualItems.Find(x => x.itemData == item);
+        if (target != null)
+        {
+            return target.rectTransform.GetComponent<IListItem>();
+        }
+        return null;
     }
 }
