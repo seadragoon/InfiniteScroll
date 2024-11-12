@@ -281,48 +281,39 @@ public class InfiniteScroll : UIBehaviour
                 float diff = _autoScrollFinishPosition - _autoScrollStartPosition;
                 if (diff > 0)
                 {
-                    anchoredPosition += diff * Time.deltaTime * SPRING_POWER;
-                    if (_autoScrollFinishPosition < anchoredPosition)
+                    if (_autoScrollFinishPosition < anchoredPosition + diff * Time.deltaTime * SPRING_POWER)
                     {
-                        OnScrollFixed(GetCurrentIndex());
+                        OnScrollFixed(_autoScrollTargetIndex);
+                    }
+                    else
+                    {
+                        anchoredPosition += diff * Time.deltaTime * SPRING_POWER;
                     }
                 }
                 else
                 {
-                    anchoredPosition -= -diff * Time.deltaTime * SPRING_POWER;
-                    if (_autoScrollFinishPosition > anchoredPosition)
+                    if (_autoScrollFinishPosition > anchoredPosition + diff * Time.deltaTime * SPRING_POWER)
                     {
-                        OnScrollFixed(GetCurrentIndex());
+                        OnScrollFixed(_autoScrollTargetIndex);
+                    }
+                    else
+                    {
+                        anchoredPosition -= -diff * Time.deltaTime * SPRING_POWER;
                     }
                 }
             }
         }
 
-        try
+        // 位置が進んだ（番号が戻った）場合
+        if (_preFramePosition < anchoredPosition)
         {
-            // 位置が進んだ（番号が戻った）場合
-            if (_preFramePosition < anchoredPosition)
-            {
-                AdjustPositionMoveForward();
-            }
-
-            // 位置が戻った（番号が進んだ）場合
-            if (_preFramePosition > anchoredPosition)
-            {
-                AdjustPositionMoveBack();
-            }
+            AdjustPositionMoveForward();
         }
-        catch (InvalidOperationException e)
+
+        // 位置が戻った（番号が進んだ）場合
+        if (_preFramePosition > anchoredPosition)
         {
-            // バグったら強制スクロール
-            if (_isAutoScroll)
-            {
-                ForceScroll(_autoScrollTargetIndex);
-            }
-            else
-            {
-                Debug.LogError(e);
-            }
+            AdjustPositionMoveBack();
         }
 
 
@@ -344,19 +335,12 @@ public class InfiniteScroll : UIBehaviour
                 actualItem.rectTransform.anchoredPosition -= (direction == Direction.Vertical) ? new Vector2(0, -offset) : new Vector2(offset, 0);
 
                 // アイテムデータを更新
-                try
-                {
-                    int nextIndex = actualItem.itemData.index - _actualItems.Count;
-                    int itemIndex = GetItemIndex(nextIndex);
-                    actualItem.itemData = _items[itemIndex];
+                int nextIndex = actualItem.itemData.index - _actualItems.Count;
+                int itemIndex = GetItemIndex(nextIndex);
+                actualItem.itemData = _items[itemIndex];
 
-                    // 更新通知
-                    OnItemShow(_items[itemIndex]);
-                }
-                catch (InvalidOperationException e)
-                {
-                    throw e;
-                }
+                // 更新通知
+                OnItemShow(_items[itemIndex]);
             }
         }
     }
@@ -374,20 +358,13 @@ public class InfiniteScroll : UIBehaviour
                 var offset = itemSize * _actualItems.Count;
                 actualItem.rectTransform.anchoredPosition += (direction == Direction.Vertical) ? new Vector2(0, -offset) : new Vector2(offset, 0);
 
-                try
-                {
-                    // アイテムデータを更新
-                    int nextIndex = actualItem.itemData.index + _actualItems.Count;
-                    int itemIndex = GetItemIndex(nextIndex);
-                    actualItem.itemData = _items[itemIndex];
+                // アイテムデータを更新
+                int nextIndex = actualItem.itemData.index + _actualItems.Count;
+                int itemIndex = GetItemIndex(nextIndex);
+                actualItem.itemData = _items[itemIndex];
 
-                    // 更新通知
-                    OnItemShow(_items[itemIndex]);
-                }
-                catch (InvalidOperationException e)
-                {
-                    throw e;
-                }
+                // 更新通知
+                OnItemShow(_items[itemIndex]);
             }
         }
     }
@@ -411,7 +388,7 @@ public class InfiniteScroll : UIBehaviour
         // 移動する先を設定する
         _autoScrollTargetIndex = index;
         _autoScrollStartPosition = anchoredPosition;
-        _autoScrollFinishPosition = GetTargetPosition(index);
+        _autoScrollFinishPosition = GetTargetPosition(_autoScrollTargetIndex);
     }
     public void ScrollInInfinite(int itemIndex)
     {
