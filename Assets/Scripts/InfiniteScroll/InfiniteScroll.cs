@@ -281,9 +281,9 @@ public class InfiniteScroll : UIBehaviour
                 float velocity = (_autoScrollFinishPosition - _autoScrollStartPosition) * Time.deltaTime * SPRING_POWER;
 
                 // 最大速度を超えないようにする ※速すぎるとバグるので1フレームで進む距離はスクロール範囲と同等くらいまでにしないといけない
-                if (velocity > Mathf.Min(LIMIT_SCROLL_VELOCITY, scrollAreaSize))
+                if (Mathf.Abs(velocity) > Mathf.Min(LIMIT_SCROLL_VELOCITY, scrollAreaSize))
                 {
-                    velocity = Mathf.Min(LIMIT_SCROLL_VELOCITY, scrollAreaSize);
+                    velocity = (velocity > 0 ? 1 : -1) * Mathf.Min(LIMIT_SCROLL_VELOCITY, scrollAreaSize);
                 }
 
                 if (velocity == 0
