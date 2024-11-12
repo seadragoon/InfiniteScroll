@@ -5,42 +5,46 @@ using System.Collections.Generic;
 using System.Linq;
 using static UnityEditor.PlayerSettings;
 using static UnityEditor.Progress;
+using System;
+using System.Reflection;
 
 public class InfiniteScroll : UIBehaviour
 {
-	//! 方向
-	public enum Direction
-	{
-		Vertical,
-		Horizontal,
-	}
+    //! 方向
+    public enum Direction
+    {
+        Vertical,
+        Horizontal,
+    }
 
-	//! 作成するプレハブ
-	[SerializeField]
-	private RectTransform _itemPrefab = null;
-	//! FIXに掛かる力
-	[SerializeField]
-	private int SPRING_POWER = 10;
-	//! 制限スクロール速度
-	[SerializeField]
-	private int LIMIT_SCROLL_VELOCITY = 200;
+    //! 作成するプレハブ
+    [SerializeField]
+    private RectTransform _itemPrefab = null;
+    //! FIXに掛かる力
+    [SerializeField]
+    private int SPRING_POWER = 10;
+    //! 制限スクロール速度
+    [SerializeField]
+    private int LIMIT_SCROLL_VELOCITY = 200;
     //! スクロールの方向
     [SerializeField]
     private Direction direction = Direction.Vertical;
 
-	//! 初期化済みかどうか
-	private bool isInitialized = false;
-	//! 内部アイテムリスト
-	private ItemData[] _innerItems = null;
-	//! 作成されたリストアイテムのRectTransform
-	private List<RectTransform> _createdItems = new List<RectTransform>();
+    //! 初期化済みかどうか
+    private bool isInitialized = false;
+    //! 内部アイテムリスト
+    private ItemData[] _items = null;
+    //! 作成されたリストアイテムのRectTransform
+    private List<RectTransform> _actualItems = new List<RectTransform>();
 
-	//! スクロール
-	private FixedScrollRect _fixedScroll = null;
-	//! 実際に用意する生成アイテム数
-	private int _actualItemCount = 0;
+    //! スクロール
+    private FixedScrollRect _fixedScroll = null;
+    //! 実際に用意する生成アイテム数
+    private int _actualItemCount = 0;
     //! 前フレームの位置
     private float _preFramePosition = 0;
+    //! 自動スクロール対象インデックス
+    private int _autoScrollTargetIndex = 0;
     //! 自動スクロール開始位置
     private float _autoScrollStartPosition = 0;
     //! 自動スクロール終了位置
@@ -50,112 +54,125 @@ public class InfiniteScroll : UIBehaviour
     //! 固定されたかどうか
     private bool _isFix = false;
 
-	//! RectTransform
-	private RectTransform _rectTransform;
-	public RectTransform rectTransform {
-		get {
-			if(_rectTransform == null) _rectTransform = GetComponent<RectTransform>();
-			return _rectTransform;
-		}
-	}
+    //! RectTransform
+    private RectTransform _rectTransform;
+    public RectTransform rectTransform
+    {
+        get
+        {
+            if (_rectTransform == null) _rectTransform = GetComponent<RectTransform>();
+            return _rectTransform;
+        }
+    }
 
-	//! アンカー位置
-	private float anchoredPosition
-	{
-		get {
-			return direction == Direction.Vertical ? -rectTransform.anchoredPosition.y : rectTransform.anchoredPosition.x;
-		}
-		set {
-			// 位置を設定
-			if (direction == Direction.Vertical) {
-				_rectTransform.anchoredPosition = new Vector2 (0, -value);
-			} else { 
-				_rectTransform.anchoredPosition = new Vector2 (value, 0);
-			}
-		}
-	}
+    //! アンカー位置
+    private float anchoredPosition
+    {
+        get
+        {
+            return direction == Direction.Vertical ? -rectTransform.anchoredPosition.y : rectTransform.anchoredPosition.x;
+        }
+        set
+        {
+            // 位置を設定
+            if (direction == Direction.Vertical)
+            {
+                _rectTransform.anchoredPosition = new Vector2(0, -value);
+            }
+            else
+            {
+                _rectTransform.anchoredPosition = new Vector2(value, 0);
+            }
+        }
+    }
 
-	// スクロール領域のサイズ
+    // スクロール領域のサイズ
     private float scrollAreaSize
     {
         get
         {
-			var scrollRect = _fixedScroll.GetComponent<RectTransform>();
+            var scrollRect = _fixedScroll.GetComponent<RectTransform>();
             return (direction == Direction.Vertical) ? scrollRect.rect.height : scrollRect.rect.width;
         }
     }
     //! スクロール速度
     private float scrollVelocity
-	{
-		get
+    {
+        get
         {
-			return (direction == Direction.Vertical) ? -_fixedScroll.velocity.y : _fixedScroll.velocity.x;
+            return (direction == Direction.Vertical) ? -_fixedScroll.velocity.y : _fixedScroll.velocity.x;
         }
-	}
+    }
 
-	//! スクロールベース位置
-	private float basePosition {
-		get {
-			float length = (direction == Direction.Vertical) ? rectTransform.rect.height : rectTransform.rect.width;
-			// スクロールの中心からアンカーが上なのでアイテムの半分だけ上にずらす
-			return (length / 2)/* center */ - (itemSize / 2);
-		}
-	}
+    //! スクロールベース位置
+    private float basePosition
+    {
+        get
+        {
+            float length = (direction == Direction.Vertical) ? rectTransform.rect.height : rectTransform.rect.width;
+            // スクロールの中心からアンカーが上なのでアイテムの半分だけ上にずらす
+            return (length / 2)/* center */ - (itemSize / 2);
+        }
+    }
 
-	//! アイテムの大きさを返却
-	private float _itemSize = -1;
-	public float itemSize {
-		get {
-			if(_itemPrefab != null && _itemSize == -1) {
-				_itemSize = direction == Direction.Vertical ? _itemPrefab.sizeDelta.y : _itemPrefab.sizeDelta.x;
-			}
-			return _itemSize;
-		}
-	}
+    //! アイテムの大きさを返却
+    private float _itemSize = -1;
+    public float itemSize
+    {
+        get
+        {
+            if (_itemPrefab != null && _itemSize == -1)
+            {
+                _itemSize = direction == Direction.Vertical ? _itemPrefab.sizeDelta.y : _itemPrefab.sizeDelta.x;
+            }
+            return _itemSize;
+        }
+    }
 
-	//! アイテム情報クラス
-	private class ItemData
-	{
-		private int _useItemIndex = -1;	//!< 作成されたアイテムのうち、どのインデックスを使用しているか
+    //! アイテム情報クラス
+    private class ItemData
+    {
+        private int _useItemIndex = -1; //!< 作成されたアイテムのうち、どのインデックスを使用しているか
 
-		public int index;	//!< インデックス
-		public object data;	//!< アイテムに設定されるデータ
+        public int index;   //!< インデックス
+        public object data; //!< アイテムに設定されるデータ
 
-		//! 作成されたアイテムのインデックス
-		public int useItemIndex
-		{
-			get { return _useItemIndex; }
-			set{
-				_useItemIndex = value;
-			}
-		}
-	}
+        //! 作成されたアイテムのインデックス
+        public int useItemIndex
+        {
+            get { return _useItemIndex; }
+            set
+            {
+                _useItemIndex = value;
+            }
+        }
+    }
 
 
-	// ------------------- 定義ここまで ------------------- //
+    // ------------------- 定義ここまで ------------------- //
 
-	//! アイテムリストを作成
-	public void Create<T>( IList<T> items )
-	{
-		if (_itemPrefab == null) return;
-		if (items == null) return;
+    //! アイテムリストを作成
+    public void Create<T>(IList<T> items)
+    {
+        if (_itemPrefab == null) return;
+        if (items == null) return;
 
-		// 初期化
-		Initialize();
+        // 初期化
+        Initialize();
 
-		// 内部リストアイテムを設定
-		ItemData[] newItems = new ItemData[items.Count];
-		for (int i = 0, len = items.Count; i < len; i++)
-		{
-			ItemData item = new ItemData ();
-			item.index = i;
-			item.data = items [i];
-			newItems [i] = item;
-		}
-		_innerItems = newItems;
+        // 内部リストアイテムを設定
+        ItemData[] newItems = new ItemData[items.Count];
+        for (int i = 0, len = items.Count; i < len; i++)
+        {
+            ItemData item = new ItemData();
+            item.index = i;
+            item.data = items[i];
+            newItems[i] = item;
+        }
+        _items = newItems;
 
         // 最初に表示するリストを作成
-        if (_createdItems.Count == 0)
+        if (_actualItems.Count == 0)
         {
             // 最初に表示するリストを作成
             for (int i = 0; i < _actualItemCount; i++)
@@ -166,7 +183,7 @@ public class InfiniteScroll : UIBehaviour
                 obj.name = i.ToString();
 
                 // 作成したアイテムリストに追加
-                _createdItems.Add(obj);
+                _actualItems.Add(obj);
 
                 // 表示
                 obj.gameObject.SetActive(true);
@@ -180,58 +197,58 @@ public class InfiniteScroll : UIBehaviour
         ForceScroll(0);
     }
 
-	//! 初期化
-	private void Initialize()
-	{
-		// 初期化済みの確認
-		if( isInitialized ) return;
+    //! 初期化
+    private void Initialize()
+    {
+        // 初期化済みの確認
+        if (isInitialized) return;
 
         // アイテムを非表示に
         _itemPrefab.gameObject.SetActive(false);
 
         // スクロールを初期化
         _fixedScroll = GetComponentInParent<FixedScrollRect>();
-		_fixedScroll.horizontal = direction == Direction.Horizontal;
-		_fixedScroll.vertical = direction == Direction.Vertical;
-		_fixedScroll.content = rectTransform;
-		_fixedScroll.movementType = ScrollRect.MovementType.Unrestricted;
+        _fixedScroll.horizontal = direction == Direction.Horizontal;
+        _fixedScroll.vertical = direction == Direction.Vertical;
+        _fixedScroll.content = rectTransform;
+        _fixedScroll.movementType = ScrollRect.MovementType.Unrestricted;
 
-		// スクロールイベント登録
-		_fixedScroll.onBeginDrag.RemoveAllListeners();
+        // スクロールイベント登録
+        _fixedScroll.onBeginDrag.RemoveAllListeners();
         _fixedScroll.onBeginDrag.AddListener(OnBeginDrag);
 
-		// 実際に用意する生成アイテム数
+        // 実際に用意する生成アイテム数
         _actualItemCount = Mathf.CeilToInt(scrollAreaSize / itemSize) + 3;
 
         // 初期化完了
         isInitialized = true;
     }
 
-	//! 実際に表示するアイテムの初期化
-	private void InitializeActualItems(int index)
+    //! 実際に表示するアイテムの初期化
+    private void InitializeActualItems(int index)
     {
         // 内部データ初期化
-        for (int i = 0; i < _innerItems.Length; i++)
+        for (int i = 0; i < _items.Length; i++)
         {
-            _innerItems[i].useItemIndex = -1;
+            _items[i].useItemIndex = -1;
         }
 
         // 実際のアイテムを初期化
-        for (int i = 0; i < _createdItems.Count; i++)
+        for (int i = 0; i < _actualItems.Count; i++)
         {
             int totalIndex = index + i;
             int actualIndex = GetActualIndex(totalIndex);
-            var obj = _createdItems[actualIndex];
+            var obj = _actualItems[actualIndex];
 
             // 位置設定
             obj.anchoredPosition = (direction == Direction.Vertical) ? new Vector2(0, -itemSize * totalIndex) : new Vector2(itemSize * totalIndex, 0);
 
             // index設定
-            int innerIndex = GetInnerIndex(actualIndex);
-            _innerItems[innerIndex].useItemIndex = actualIndex;
+            int itemIndex = GetItemIndex(actualIndex);
+            _items[itemIndex].useItemIndex = actualIndex;
 
             // 更新イベントの呼び出し
-            OnItemShow(_innerItems[innerIndex]);
+            OnItemShow(_items[itemIndex]);
         }
     }
 
@@ -244,13 +261,14 @@ public class InfiniteScroll : UIBehaviour
 
     //! Unity LateUpdate
     private void LateUpdate()
-	{
-		// アイテム存在確認
-		if (_createdItems.Count <= 0) {
-			return;
+    {
+        // アイテム存在確認
+        if (_actualItems.Count <= 0)
+        {
+            return;
         }
 
-		if (!_fixedScroll.isDrag && !_isFix)
+        if (!_fixedScroll.isDrag && !_isFix)
         {
             // ドラッグ終了後、自動スクロール位置を決定する
             if (!_isAutoScroll && Mathf.Abs(scrollVelocity) < LIMIT_SCROLL_VELOCITY)
@@ -259,8 +277,8 @@ public class InfiniteScroll : UIBehaviour
                 _fixedScroll.StopMovement();
 
                 // 現在位置から次の位置を決定する
-                int targetIndex = GetCurrentIndex();
-                _autoScrollFinishPosition = GetTargetPosition(targetIndex);
+                _autoScrollTargetIndex = GetCurrentIndex();
+                _autoScrollFinishPosition = GetTargetPosition(_autoScrollTargetIndex);
                 _autoScrollStartPosition = anchoredPosition;
                 _isAutoScroll = true;
             }
@@ -269,107 +287,154 @@ public class InfiniteScroll : UIBehaviour
             if (_isAutoScroll)
             {
                 float diff = _autoScrollFinishPosition - _autoScrollStartPosition;
-				if (diff > 0)
-				{
-					anchoredPosition += diff * Time.deltaTime * SPRING_POWER;
-					if (_autoScrollFinishPosition < anchoredPosition)
-					{
+                if (diff > 0)
+                {
+                    anchoredPosition += diff * Time.deltaTime * SPRING_POWER;
+                    if (_autoScrollFinishPosition < anchoredPosition)
+                    {
                         OnScrollFixed(GetCurrentIndex());
-					}
-				}
-				else
-				{
-					anchoredPosition -= -diff * Time.deltaTime * SPRING_POWER;
-					if (_autoScrollFinishPosition > anchoredPosition)
-					{
+                    }
+                }
+                else
+                {
+                    anchoredPosition -= -diff * Time.deltaTime * SPRING_POWER;
+                    if (_autoScrollFinishPosition > anchoredPosition)
+                    {
                         OnScrollFixed(GetCurrentIndex());
-					}
-				}
+                    }
+                }
             }
         }
 
-        // 位置が進んだ（番号が戻った）場合
-        if (_preFramePosition < anchoredPosition)
+        try
         {
-            AdjustPositionMoveForward();
-        }
+            // 位置が進んだ（番号が戻った）場合
+            if (_preFramePosition < anchoredPosition)
+            {
+                AdjustPositionMoveForward();
+            }
 
-        // 位置が戻った（番号が進んだ）場合
-        if (_preFramePosition > anchoredPosition)
+            // 位置が戻った（番号が進んだ）場合
+            if (_preFramePosition > anchoredPosition)
+            {
+                AdjustPositionMoveBack();
+            }
+        }
+        catch (InvalidOperationException e)
         {
-            AdjustPositionMoveBack();
+            // バグったら強制スクロール
+            if (_isAutoScroll)
+            {
+                ForceScroll(_autoScrollTargetIndex);
+            }
+            else
+            {
+                Debug.LogError(e);
+            }
         }
 
 
         // 現在のフレームの位置を保持
         _preFramePosition = anchoredPosition;
     }
-	//! 前方に移動した際の位置移動（前から後ろへ）
-	public void AdjustPositionMoveForward()
+    //! 前方に移動した際の位置移動（前から後ろへ）
+    public void AdjustPositionMoveForward()
     {
-        for (int i = 0; i < _createdItems.Count; i++)
+        for (int i = 0; i < _actualItems.Count; i++)
         {
-            var item = _createdItems[i];
+            var item = _actualItems[i];
             var pos = (direction == Direction.Vertical) ? -item.anchoredPosition.y : item.anchoredPosition.x;
 
             if (anchoredPosition + pos > scrollAreaSize + itemSize)
             {
                 // アイテムの位置移動
-                var offset = itemSize * _actualItemCount;
+                var offset = itemSize * _actualItems.Count;
                 item.anchoredPosition -= (direction == Direction.Vertical) ? new Vector2(0, -offset) : new Vector2(offset, 0);
 
                 // アイテムデータを更新
-                var beforeItem = _innerItems.First(x => x.useItemIndex == i);
-                beforeItem.useItemIndex = -1;
-                int nextIndex = beforeItem.index - _actualItemCount;
-                int itemIndex = GetInnerIndex(nextIndex);
-                _innerItems[itemIndex].useItemIndex = i;
+                try
+                {
+                    var beforeItem = _items.First(x => x.useItemIndex == i);
+                    beforeItem.useItemIndex = -1;
+                    int nextIndex = beforeItem.index - _actualItems.Count;
+                    int itemIndex = GetItemIndex(nextIndex);
+                    _items[itemIndex].useItemIndex = i;
 
-                // 更新通知
-                OnItemShow(_innerItems[itemIndex]);
+                    // 更新通知
+                    OnItemShow(_items[itemIndex]);
+                }
+                catch (InvalidOperationException e)
+                {
+                    throw e;
+                }
             }
         }
     }
     //! 後方に移動した際の奥側の位置設定
     public void AdjustPositionMoveBack()
     {
-        for (int i = 0; i < _createdItems.Count; i++)
+        for (int i = 0; i < _actualItems.Count; i++)
         {
-            var item = _createdItems[i];
+            var item = _actualItems[i];
             var pos = (direction == Direction.Vertical) ? -item.anchoredPosition.y : item.anchoredPosition.x;
 
             if (anchoredPosition + pos < -itemSize * 2)
             {
                 // アイテムの位置移動
-                var offset = itemSize * _actualItemCount;
+                var offset = itemSize * _actualItems.Count;
                 item.anchoredPosition += (direction == Direction.Vertical) ? new Vector2(0, -offset) : new Vector2(offset, 0);
 
-                // アイテムデータを更新
-                var beforeItem = _innerItems.First(x => x.useItemIndex == i);
-                beforeItem.useItemIndex = -1;
-                int nextIndex = beforeItem.index + _actualItemCount;
-                int itemIndex = GetInnerIndex(nextIndex);
-                _innerItems[itemIndex].useItemIndex = i;
+                try
+                {
+                    // アイテムデータを更新
+                    var beforeItem = _items.First(x => x.useItemIndex == i);
+                    beforeItem.useItemIndex = -1;
+                    int nextIndex = beforeItem.index + _actualItems.Count;
+                    int itemIndex = GetItemIndex(nextIndex);
+                    _items[itemIndex].useItemIndex = i;
 
-                // 更新通知
-                OnItemShow(_innerItems[itemIndex]);
+                    // 更新通知
+                    OnItemShow(_items[itemIndex]);
+                }
+                catch (InvalidOperationException e)
+                {
+                    throw e;
+                }
             }
         }
     }
 
-	//! スクロールを指定位置に移動する
-	public void Scroll(int index)
-	{
-		// スクロールの動きを止める
-		_fixedScroll.StopMovement ();
+    //! スクロールを指定位置に移動する
+    public void Scroll(int index)
+    {
+        // 既に指定のインデックスにいる場合は無視
+        if (GetCurrentIndex() == index)
+        {
+            return;
+        }
 
-		// 自動スクロールON
+        // スクロールの動きを止める
+        _fixedScroll.StopMovement();
+
+        // 自動スクロールON
         _isFix = false;
         _isAutoScroll = true;
 
         // 移動する先を設定する
-        _autoScrollFinishPosition = GetTargetPosition(index);
+        _autoScrollTargetIndex = index;
         _autoScrollStartPosition = anchoredPosition;
+        _autoScrollFinishPosition = GetTargetPosition(index);
+    }
+    public void ScrollInInfinite(int itemIndex)
+    {
+        // 既に指定のインデックスにいる場合は無視
+        if (GetCurrentItemIndex() == itemIndex)
+        {
+            return;
+        }
+
+        int targetIndex = GetNearItemIndexInfinite(itemIndex);
+        Scroll(targetIndex);
     }
     //! スクロールを指定位置に強制移動する
     public void ForceScroll(int index)
@@ -395,60 +460,92 @@ public class InfiniteScroll : UIBehaviour
         AdjustPositionMoveForward();
         AdjustPositionMoveBack();
         // アイテム固定されたイベント発火
-        int itemIndex = GetInnerIndex(GetCurrentIndex());
-        OnItemFixed(_innerItems[itemIndex]);
+        int itemIndex = GetItemIndex(GetCurrentIndex());
+        OnItemFixed(_items[itemIndex]);
     }
-    //! インデックスをアンカー位置から求める
+    //! 現在のインデックスを取得
     public int GetCurrentIndex()
-	{
-		float rough = (basePosition - anchoredPosition) / itemSize;
-		return (int)Mathf.Round(rough);
-	}
-	//! 現在のアイテムを取得する
-	public T GetCurrentItem<T>()
-	{
-		int itemIndex = GetInnerIndex(GetCurrentIndex());
-
-		return (T)_innerItems [itemIndex].data;
-	}
-
-
-	//! 対象インデックスの位置を取得
-	private float GetTargetPosition(int index)
-	{
-		return basePosition - (itemSize * index);
+    {
+        float rough = (basePosition - anchoredPosition) / itemSize;
+        return (int)Mathf.Round(rough);
     }
-	//! 指定された数値の配列インデックスを返す
-	private int GetArrayIndex(int number, int length)
-	{
-		if (number < 0) {
-			int remain = Mathf.Abs (number) % length;
-			return (remain == 0) ? 0 : length - Mathf.Abs (number) % length;
-		} else {
-			return number % length;
-		}
+    //! 現在のアイテム番号を取得
+    public int GetCurrentItemIndex()
+    {
+        return GetCurrentIndex() % _items.Length;
+    }
+    //! 現在のアイテムを取得する
+    public T GetCurrentItem<T>()
+    {
+        int itemIndex = GetItemIndex(GetCurrentIndex());
+
+        return (T)_items[itemIndex].data;
+    }
+
+
+    private int GetNearItemIndexInfinite(int itemIndex)
+    {
+        int currentIndex = GetCurrentIndex();
+        int startIndex = (currentIndex / _items.Length) * _items.Length;
+        int currentTargetIndex = startIndex + itemIndex;
+
+        // 同一ループでの移動か、前後ループへの移動のどれが近いか
+        if (MathF.Abs(currentTargetIndex - currentIndex) > MathF.Abs(currentTargetIndex - _items.Length - currentIndex))
+        {
+            // 前の方が近い
+            return currentTargetIndex - _items.Length;
+        }
+        else if (MathF.Abs(currentTargetIndex - currentIndex) > MathF.Abs(currentTargetIndex + _items.Length - currentIndex))
+        {
+            // 後の方が近い
+            return currentTargetIndex + _items.Length;
+        }
+        else
+        {
+            // 同一が近い
+            return currentTargetIndex;
+        }
+    }
+    //! 対象インデックスの位置を取得
+    private float GetTargetPosition(int index)
+    {
+        return basePosition - (itemSize * index);
+    }
+    //! 指定された数値の配列インデックスを返す
+    private int GetArrayIndex(int number, int length)
+    {
+        if (number < 0)
+        {
+            int remain = Mathf.Abs(number) % length;
+            return (remain == 0) ? 0 : length - Mathf.Abs(number) % length;
+        }
+        else
+        {
+            return number % length;
+        }
     }
     //! 実際の配列の指定番目のインデックスを返す
     private int GetActualIndex(int number)
     {
-		return GetArrayIndex(number, _actualItemCount);
+        return GetArrayIndex(number, _actualItemCount);
     }
     //! 内部配列の指定番目のインデックスを返す
-    private int GetInnerIndex(int number)
+    private int GetItemIndex(int number)
     {
-        return GetArrayIndex(number, _innerItems.Length);
+        return GetArrayIndex(number, _items.Length);
     }
     //! アイテムが表示される際のイベント
     private void OnItemShow(ItemData item)
-	{
-		// インターフェースの取得
-		IListItem obj = GetListItemInterface(item);
+    {
+        // インターフェースの取得
+        IListItem obj = GetListItemInterface(item);
 
-		if (obj != null) {
-			obj.OnUpdateItem (item.index, item.data);
-		}
-	}
-	private void OnItemFixed(ItemData item)
+        if (obj != null)
+        {
+            obj.OnUpdateItem(item.index, item.data);
+        }
+    }
+    private void OnItemFixed(ItemData item)
     {
         // インターフェースの取得
         IListItem obj = GetListItemInterface(item);
@@ -458,8 +555,9 @@ public class InfiniteScroll : UIBehaviour
             obj.OnFixedItem(item.index, item.data);
         }
     }
-	//! アイテムが使用しているBehaviourを取得
-	private IListItem GetListItemInterface(ItemData item){
-		return _createdItems [item.useItemIndex].GetComponent<IListItem> ();
-	}
+    //! アイテムが使用しているBehaviourを取得
+    private IListItem GetListItemInterface(ItemData item)
+    {
+        return _actualItems[item.useItemIndex].GetComponent<IListItem>();
+    }
 }

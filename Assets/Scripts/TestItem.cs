@@ -8,14 +8,14 @@ using UnityEngine.UI;
 /// </summary>
 public class TestItem : UIBehaviour, IListItem
 {
-	public class Data
-	{
-		public int itemNo;
+    public class Data
+    {
+        public int itemNo;
         public UnityAction<int> onClickItem;
-	}
+    }
 
-	[SerializeField]
-	private Text _text;
+    [SerializeField]
+    private Text _text;
     [SerializeField]
     private Button _button;
 
@@ -44,11 +44,11 @@ public class TestItem : UIBehaviour, IListItem
     }
 
     public void OnUpdateItem(int index, object item)
-	{
+    {
         _data = item as Data;
 
-		_text.text = _data.itemNo.ToString ();
-	}
+        _text.text = _data.itemNo.ToString();
+    }
 
     public void OnFixedItem(int index, object item)
     {

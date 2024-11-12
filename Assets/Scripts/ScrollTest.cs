@@ -19,8 +19,8 @@ public class ScrollTest : MonoBehaviour
         _scroll.Create(list.ToArray());
     }
 
-    private void OnClickItem (int itemNo)
+    private void OnClickItem(int itemNo)
     {
-        _scroll.ForceScroll(0);
+        _scroll.ScrollInInfinite(0);
     }
 }
