@@ -17,6 +17,14 @@ public class InfiniteScroll : UIBehaviour
         Horizontal,
     }
 
+    // 止まる場所
+    public enum FixPlace
+    {
+        Front,
+        Center,
+        Rear
+    }
+
     //! 作成するプレハブ
     [SerializeField]
     private RectTransform _itemPrefab = null;
@@ -29,6 +37,9 @@ public class InfiniteScroll : UIBehaviour
     //! スクロールの方向
     [SerializeField]
     private Direction direction = Direction.Vertical;
+    //! スクロールの方向
+    [SerializeField]
+    private FixPlace _fixPlace = FixPlace.Center;
 
     //! 初期化済みかどうか
     private bool isInitialized = false;
@@ -109,9 +120,16 @@ public class InfiniteScroll : UIBehaviour
     {
         get
         {
-            float length = (direction == Direction.Vertical) ? rectTransform.rect.height : rectTransform.rect.width;
-            // スクロールの中心からアンカーが上なのでアイテムの半分だけ上にずらす
-            return (length / 2)/* center */ - (itemSize / 2);
+            switch(_fixPlace)
+            {
+                case FixPlace.Front:
+                    return 0;
+                case FixPlace.Center:
+                    return (scrollAreaSize / 2) - (itemSize / 2);
+                case FixPlace.Rear:
+                    return scrollAreaSize - itemSize;
+            }
+            return 0;
         }
     }
 
@@ -201,9 +219,6 @@ public class InfiniteScroll : UIBehaviour
         // 初期化済みの確認
         if (isInitialized) return;
 
-        // アイテムを非表示に
-        _itemPrefab.gameObject.SetActive(false);
-
         // スクロールを初期化
         _fixedScroll = GetComponentInParent<FixedScrollRect>();
         _fixedScroll.horizontal = direction == Direction.Horizontal;
@@ -214,6 +229,20 @@ public class InfiniteScroll : UIBehaviour
         // スクロールイベント登録
         _fixedScroll.onBeginDrag.RemoveAllListeners();
         _fixedScroll.onBeginDrag.AddListener(OnBeginDrag);
+
+        // スクロールコンテンツ初期化(スクロール領域ピッタリにストレッチ)
+        rectTransform.anchorMin = new Vector2(0, 0);
+        rectTransform.anchorMax = new Vector2(1, 1);
+        rectTransform.offsetMin = new Vector2(0, 0);
+        rectTransform.offsetMax = new Vector2(0, 0);
+
+        // アイテムを初期化して非表示に
+        _itemPrefab.anchorMin = direction == Direction.Vertical ? new Vector2(0, 1) : new Vector2(0, 0);
+        _itemPrefab.anchorMax = direction == Direction.Vertical ? new Vector2(1, 1) : new Vector2(0, 1);
+        _itemPrefab.pivot = direction == Direction.Vertical ? new Vector2(0.5f, 1f) : new Vector2(0f, 0.5f);
+        _itemPrefab.offsetMin = direction == Direction.Vertical ? new Vector2(0, -_itemPrefab.rect.height) : new Vector2(0, 0);
+        _itemPrefab.offsetMax = direction == Direction.Vertical ? new Vector2(0, 0) : new Vector2(_itemPrefab.rect.width, 0);
+        _itemPrefab.gameObject.SetActive(false);
 
         // 実際に用意する生成アイテム数
         _actualItemCount = Mathf.CeilToInt(scrollAreaSize / itemSize) + 3;
