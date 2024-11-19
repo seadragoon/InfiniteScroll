@@ -17,12 +17,19 @@ public class InfiniteScroll : UIBehaviour
         Horizontal,
     }
 
-    // 止まる場所
+    //! 止まる場所
     public enum FixPlace
     {
         Front,
         Center,
         Rear
+    }
+
+    //! 移動タイプ
+    public enum DragType
+    {
+        Normal,
+        StepByStep,
     }
 
     //! 作成するプレハブ
@@ -37,9 +44,12 @@ public class InfiniteScroll : UIBehaviour
     //! スクロールの方向
     [SerializeField]
     private Direction direction = Direction.Vertical;
-    //! スクロールの方向
+    //! 止まる場所
     [SerializeField]
     private FixPlace _fixPlace = FixPlace.Center;
+    //! ドラッグタイプ
+    [SerializeField]
+    private DragType _dragType = DragType.Normal;
 
     //! 初期化済みかどうか
     private bool isInitialized = false;
@@ -64,6 +74,8 @@ public class InfiniteScroll : UIBehaviour
     private bool _isAutoScroll = false;
     //! 固定されたかどうか
     private bool _isFix = false;
+    //! ドラッグ開始時のインデックス
+    private int _dragStartIndex = 0;
 
     //! RectTransform
     private RectTransform _rectTransform;
@@ -229,6 +241,7 @@ public class InfiniteScroll : UIBehaviour
         // スクロールイベント登録
         _fixedScroll.onBeginDrag.RemoveAllListeners();
         _fixedScroll.onBeginDrag.AddListener(OnBeginDrag);
+        _fixedScroll.onEndDrag.AddListener(OnEndDrag);
 
         // スクロールコンテンツ初期化(スクロール領域ピッタリにストレッチ)
         rectTransform.anchorMin = new Vector2(0, 0);
@@ -278,6 +291,14 @@ public class InfiniteScroll : UIBehaviour
     {
         _isFix = false;
         _isAutoScroll = false;
+        _dragStartIndex = GetCurrentIndex();
+    }
+    private void OnEndDrag()
+    {
+        if (_dragType == DragType.StepByStep)
+        {
+            _fixedScroll.StopMovement();
+        }
     }
 
     //! Unity LateUpdate
@@ -289,9 +310,28 @@ public class InfiniteScroll : UIBehaviour
             return;
         }
 
+        // StepByStepの場合のドラッグ中の制御
+        if (_fixedScroll.isDrag && _dragType == DragType.StepByStep)
+        {
+            // 限界値を隣接する一つとして、その位置を超えないようにする
+            var nextPos = GetTargetPosition(_dragStartIndex + 1);
+            var prevPos = GetTargetPosition(_dragStartIndex - 1);
+            if (nextPos > anchoredPosition)
+            {
+                anchoredPosition = nextPos;
+                _fixedScroll.StopMovement();
+            }
+            else if (prevPos < anchoredPosition)
+            {
+                anchoredPosition = prevPos;
+                _fixedScroll.StopMovement();
+            }
+        }
+
+        // ドラッグ終了後、固定するまで
         if (!_fixedScroll.isDrag && !_isFix)
         {
-            // ドラッグ終了後、自動スクロール位置を決定する
+            // 自動スクロール位置を決定する
             if (!_isAutoScroll && Mathf.Abs(scrollVelocity) < LIMIT_SCROLL_VELOCITY)
             {
                 // スクロールの動きを止める

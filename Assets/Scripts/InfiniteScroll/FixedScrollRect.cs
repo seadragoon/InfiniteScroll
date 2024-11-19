@@ -12,7 +12,7 @@ using UnityEngine.Events;
 public class FixedScrollRect : ScrollRect
 {
 	public UnityEvent onBeginDrag;
-	public UnityEvent oEndDrag;
+	public UnityEvent onEndDrag;
 
 	//! ドラッグしているかどうか
 	public bool isDrag
@@ -34,6 +34,6 @@ public class FixedScrollRect : ScrollRect
 		base.OnEndDrag (eventData);
 		isDrag = false;
 
-        oEndDrag?.Invoke();
+        onEndDrag?.Invoke();
     }
 }
