@@ -7,16 +7,26 @@ using UnityEngine;
 public interface IListItem
 {
     /// <summary>
+    /// アイテムの初期化時に呼ばれる
+    /// </summary>
+    /// <param name="totalIndex"></param>
+    /// <param name="itemIndex"></param>
+    /// <param name="item"></param>
+    void OnInitItem(int totalIndex, int itemIndex, object item);
+
+    /// <summary>
     /// アイテムの更新時に呼ばれる
     /// </summary>
-    /// <param name="index"></param>
+    /// <param name="totalIndex"></param>
+    /// <param name="itemIndex"></param>
     /// <param name="item"></param>
-    void OnUpdateItem(int index, object item);
+    void OnUpdateItem(int totalIndex, int itemIndex, object item);
 
     /// <summary>
     /// アイテムが固定された時に呼ばれる
     /// </summary>
-    /// <param name="index"></param>
+    /// <param name="totalIndex"></param>
+    /// <param name="itemIndex"></param>
     /// <param name="item"></param>
-    void OnFixedItem(int index, object item);
+    void OnFixedItem(int totalIndex, int itemIndex, object item);
 }

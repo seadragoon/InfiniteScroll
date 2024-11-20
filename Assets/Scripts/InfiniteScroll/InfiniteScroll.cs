@@ -2,11 +2,7 @@
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
 using System.Collections.Generic;
-using System.Linq;
-using static UnityEditor.PlayerSettings;
-using static UnityEditor.Progress;
 using System;
-using System.Reflection;
 
 public class InfiniteScroll : UIBehaviour
 {
@@ -83,7 +79,7 @@ public class InfiniteScroll : UIBehaviour
     {
         get
         {
-            if (_rectTransform == null) _rectTransform = GetComponent<RectTransform>();
+            if (_rectTransform == null) _rectTransform = _fixedScroll.content;
             return _rectTransform;
         }
     }
@@ -132,7 +128,7 @@ public class InfiniteScroll : UIBehaviour
     {
         get
         {
-            switch(_fixPlace)
+            switch (_fixPlace)
             {
                 case FixPlace.Front:
                     return 0;
@@ -162,6 +158,7 @@ public class InfiniteScroll : UIBehaviour
     //! 実際のアイテム
     private class ActualItem
     {
+        public int totalIndex;
         public ItemData itemData;
         public RectTransform rectTransform;
     }
@@ -204,11 +201,12 @@ public class InfiniteScroll : UIBehaviour
             {
                 var rect = Instantiate(_itemPrefab) as RectTransform;
                 // RectTransformを初期化
-                rect.SetParent(transform, false);
+                rect.SetParent(_fixedScroll.content, false);
                 rect.name = i.ToString();
 
                 // 作成したアイテムに追加
                 var item = new ActualItem();
+                item.totalIndex = i;
                 item.itemData = null;
                 item.rectTransform = rect;
                 _actualItems.Add(item);
@@ -217,9 +215,6 @@ public class InfiniteScroll : UIBehaviour
                 rect.gameObject.SetActive(true);
             }
         }
-
-        // 最初に表示するリストを初期化
-        InitializeActualItems(0);
 
         // 初期位置設定
         ForceScroll(0);
@@ -235,8 +230,11 @@ public class InfiniteScroll : UIBehaviour
         _fixedScroll = GetComponentInParent<FixedScrollRect>();
         _fixedScroll.horizontal = direction == Direction.Horizontal;
         _fixedScroll.vertical = direction == Direction.Vertical;
-        _fixedScroll.content = rectTransform;
         _fixedScroll.movementType = ScrollRect.MovementType.Unrestricted;
+        if (_fixedScroll.content == null)
+        {
+            _fixedScroll.content = rectTransform;
+        }
 
         // スクロールイベント登録
         _fixedScroll.onBeginDrag.RemoveAllListeners();
@@ -274,6 +272,9 @@ public class InfiniteScroll : UIBehaviour
             int actualIndex = GetActualIndex(totalIndex);
             var actualItem = _actualItems[actualIndex];
 
+            // インデックス
+            actualItem.totalIndex = totalIndex;
+
             // 位置設定
             actualItem.rectTransform.anchoredPosition = (direction == Direction.Vertical) ? new Vector2(0, -itemSize * totalIndex) : new Vector2(itemSize * totalIndex, 0);
 
@@ -281,8 +282,11 @@ public class InfiniteScroll : UIBehaviour
             int itemIndex = GetItemIndex(actualIndex);
             actualItem.itemData = _items[itemIndex];
 
+            // 初期化イベントの呼び出し
+            OnInitItem(actualIndex);
+
             // 更新イベントの呼び出し
-            OnItemShow(_items[itemIndex]);
+            OnItemShow(actualIndex);
         }
     }
 
@@ -399,12 +403,13 @@ public class InfiniteScroll : UIBehaviour
                 actualItem.rectTransform.anchoredPosition -= (direction == Direction.Vertical) ? new Vector2(0, -offset) : new Vector2(offset, 0);
 
                 // アイテムデータを更新
-                int nextIndex = actualItem.itemData.index - _actualItems.Count;
+                int nextIndex = actualItem.totalIndex - _actualItems.Count;
                 int itemIndex = GetItemIndex(nextIndex);
+                actualItem.totalIndex = nextIndex;
                 actualItem.itemData = _items[itemIndex];
 
                 // 更新通知
-                OnItemShow(_items[itemIndex]);
+                OnItemShow(nextIndex);
             }
         }
     }
@@ -423,12 +428,13 @@ public class InfiniteScroll : UIBehaviour
                 actualItem.rectTransform.anchoredPosition += (direction == Direction.Vertical) ? new Vector2(0, -offset) : new Vector2(offset, 0);
 
                 // アイテムデータを更新
-                int nextIndex = actualItem.itemData.index + _actualItems.Count;
+                int nextIndex = actualItem.totalIndex + _actualItems.Count;
                 int itemIndex = GetItemIndex(nextIndex);
+                actualItem.totalIndex = nextIndex;
                 actualItem.itemData = _items[itemIndex];
 
                 // 更新通知
-                OnItemShow(_items[itemIndex]);
+                OnItemShow(nextIndex);
             }
         }
     }
@@ -489,8 +495,7 @@ public class InfiniteScroll : UIBehaviour
         AdjustPositionMoveForward();
         AdjustPositionMoveBack();
         // アイテム固定されたイベント発火
-        int itemIndex = GetItemIndex(GetCurrentIndex());
-        OnItemFixed(_items[itemIndex]);
+        OnItemFixed(GetCurrentIndex());
     }
     //! 現在のインデックスを取得
     public int GetCurrentIndex()
@@ -563,31 +568,51 @@ public class InfiniteScroll : UIBehaviour
     {
         return GetArrayIndex(number, _items.Length);
     }
+
+
     //! アイテムが表示される際のイベント
-    private void OnItemShow(ItemData item)
+    private void OnInitItem(int totalIndex)
     {
         // インターフェースの取得
-        IListItem obj = GetListItemInterface(item);
+        int itemIndex = GetItemIndex(totalIndex);
+        var item = _items[itemIndex];
+        IListItem obj = GetListItemInterface(totalIndex);
 
         if (obj != null)
         {
-            obj.OnUpdateItem(item.index, item.data);
+            obj.OnInitItem(totalIndex, item.index, item.data);
         }
     }
-    private void OnItemFixed(ItemData item)
+    //! アイテムが表示される際のイベント
+    private void OnItemShow(int totalIndex)
     {
         // インターフェースの取得
-        IListItem obj = GetListItemInterface(item);
+        int itemIndex = GetItemIndex(totalIndex);
+        var item = _items[itemIndex];
+        IListItem obj = GetListItemInterface(totalIndex);
 
         if (obj != null)
         {
-            obj.OnFixedItem(item.index, item.data);
+            obj.OnUpdateItem(totalIndex, item.index, item.data);
+        }
+    }
+    private void OnItemFixed(int totalIndex)
+    {
+        // インターフェースの取得
+        int itemIndex = GetItemIndex(totalIndex);
+        var item = _items[itemIndex];
+        IListItem obj = GetListItemInterface(totalIndex);
+
+        if (obj != null)
+        {
+            obj.OnFixedItem(totalIndex, item.index, item.data);
         }
     }
     //! アイテムが使用しているBehaviourを取得
-    private IListItem GetListItemInterface(ItemData item)
+    private IListItem GetListItemInterface(int totalIndex)
     {
-        var target = _actualItems.Find(x => x.itemData == item);
+        int actualIndex = GetActualIndex(totalIndex);
+        var target = _actualItems[actualIndex];
         if (target != null)
         {
             return target.rectTransform.GetComponent<IListItem>();

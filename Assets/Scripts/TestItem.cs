@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -43,17 +44,22 @@ public class TestItem : UIBehaviour, IListItem
         }
     }
 
-    public void OnUpdateItem(int index, object item)
+
+    public void OnInitItem(int totalIndex, int itemIndex, object item)
+    {
+    }
+
+    public void OnUpdateItem(int totalIndex, int itemIndex, object item)
     {
         _data = item as Data;
 
         _text.text = _data.itemNo.ToString();
     }
 
-    public void OnFixedItem(int index, object item)
+    public void OnFixedItem(int totalIndex, int itemIndex, object item)
     {
         Data data = item as Data;
 
-        Debug.Log($"fix: index {index}, itemNo {data.itemNo}");
+        Debug.Log($"fix: index {totalIndex}, itemNo {data.itemNo}");
     }
 }
